@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"></script>
+  <!-- <script src="https://cdn.jsdelivr.net/gh/williamngan/pts/dist/pts.min.js"></script> -->
+  <style>
+    /* body {
+      bottom: 0;
+      font-family: 'Titillium Web', sans-serif;
+      color: white;
+      left: 0;
+      margin: 0;
+      position: absolute;
+      right: 0;
+      top: 0;
+      transform-origin: 0px 0px;
+      overflow: hidden;
+    } */
+    .container {
+      position: absolute;
+      height: 720px;
+      width: 1280px;
+    }
+    .input_video {
+      position: relative;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .output_canvas {
+      position: absolute;
+      height: 720px;
+      width: 1280px;
+      left: 0;
+      top: 0;
+      z-index: 10;
+      background-color:rgba(255,255,255,0.1);
+    }
+    .input_video, .output_canvas {
+      transform: scaleX(-1);
+      filter: FlipH;
+    }
+    #debug {
+      position: absolute;
+      top: 720px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+        <video class="input_video"></video>
+        <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+  </div>
+  <div id="debug">
+      <p id="debug1"></p>
+      <p id="debug2"></p>
+  </div>
+  <script type="module">
+    const videoElement = document.getElementsByClassName('input_video')[0];
+    const canvasElement = document.getElementsByClassName('output_canvas')[0];
+    const canvasCtx = canvasElement.getContext('2d');
+    const FLAG_DRAW_POSE = true;
+    const FLAG_DRAW_HANDS = false;
+    const boxingImg = new Image(800, 1250);
+    
+    
+    function onResults(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        // draw camera image
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        
+        // draw pose landmarks
+        if (FLAG_DRAW_POSE) {
+          drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
+                      {color: '#00FF00', lineWidth: 4});
+          drawLandmarks(canvasCtx, results.poseLandmarks,
+                      {color: '#FF0000', lineWidth: 2});
+        }
+        
+        // draw hands landmarks
+        if (FLAG_DRAW_HANDS) {
+          drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS,
+                {color: '#CC0000', lineWidth: 5});
+          drawLandmarks(canvasCtx, results.leftHandLandmarks,
+                {color: '#00FF00', lineWidth: 2});
+          drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS,
+                {color: '#00CC00', lineWidth: 5});
+          drawLandmarks(canvasCtx, results.rightHandLandmarks,
+                {color: '#FF0000', lineWidth: 2});
+        }
+
+     /* Pose landmarks */
+     // https://google.github.io/mediapipe/solutions/pose.html
+     //
+     // 2/13/2021
+      //     POSE_LANDMARKS
+      // A list of pose landmarks. Each lanmark consists of the following:
+      // x and y: Landmark coordinates normalized to [0.0, 1.0] by the image width and height respectively.
+      // z: Should be discarded as currently the model is not fully trained to predict depth, but this is something on the roadmap.
+      // visibility: A value in [0.0, 1.0] indicating the likelihood of the landmark being visible (present and not occluded) in the image.
+    
+        // A simple Point class
+        class Point {
+            constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            }
+
+            static displayName = "Point";
+            static distance(a, b) {
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            return Math.hypot(dx, dy);
+            }
+
+            static mean(a, b) {
+            const meanx = (a.x + b.x) / 2
+            const meany = (a.y + b.y) / 2
+            return new Point(meanx, meany)
+            }
+        }
+        
+        // 12: right shoulder, 11: left shoulder
+        // 16: right wrist, 15: left wrist
+        // center of box
+        const lShoulderPos = new Point(results.poseLandmarks[11].x*1280, results.poseLandmarks[11].y*720);
+        const lElbowPos = new Point(results.poseLandmarks[13].x*1280, results.poseLandmarks[13].y*720);
+        const rShoulderPos = new Point(results.poseLandmarks[12].x*1280, results.poseLandmarks[12].y*720);
+        const rElbowPos = new Point(results.poseLandmarks[14].x*1280, results.poseLandmarks[14].y*720);
+        const bodyPos = Point.mean(rShoulderPos, lShoulderPos);
+        const rHandPos = new Point(results.poseLandmarks[16].x*1280, results.poseLandmarks[16].y*720);
+        const lHandPos = new Point(results.poseLandmarks[15].x*1280, results.poseLandmarks[15].y*720);
+
+        // 9: MIDDLE_FINGER_MCP
+        // const rHandPos = new Point(results.rightHandLandmarks[9].x*1280, results.rightHandLandmarks[9].y*720);
+        // const lHandPos = new Point(results.leftHandLandmarks[9].x*1280, results.leftHandLandmarks[9].y*720);
+        
+        // const relDist = Point.distance(rShoulderPos, lShoulderPos);
+        const relDist = Point.distance(rShoulderPos, rElbowPos) + Point.distance(rElbowPos, rHandPos);
+        const ballSize = 0.25 * relDist
+        const ballPos = new Point(bodyPos.x + relDist * 0.9, bodyPos.y);
+
+        if (Point.distance(rHandPos, ballPos) < ballSize){
+            canvasCtx.fillStyle = 'green';
+            canvasCtx.fillRect(ballPos.x, ballPos.y, ballSize, ballSize);
+        } 
+        else {
+            canvasCtx.fillStyle = 'red';
+            canvasCtx.fillRect(ballPos.x, ballPos.y, ballSize, ballSize);
+            // canvasCtx.strokeText('center', center_x, center_y)
+        }
+
+        canvasCtx.fillStyle = 'white';
+        canvasCtx.fillRect(rHandPos.x, rHandPos.y, ballSize, ballSize);
+        //  canvasCtx.beginPath();
+        //  canvasCtx.moveTo(rHandPos.x, rHandPos.y);
+        //  canvasCtx.arc(rHandPos.x, rHandPos.y, 0, Math.PI*2, true);
+        //  canvasCtx.fill();
+        //  canvasCtx.moveTo(lHandPos.x, lHandPos.y);
+        //  canvasCtx.arc(lHandPos.x, lHandPos.y, 0, Math.PI*2, true);
+        //  canvasCtx.fill();
+
+
+        // hand raising
+        // canvasCtx.fillStyle = 'blue';
+        // canvasCtx.fillRect(center_x, center_y, 150, 100);
+        // console.log("center_x, center_y")
+        // canvasCtx.strokeText("handRising", 10, 240)
+
+        // debug 
+        // plot hands positions
+        $("#debug1").text(`rHandPos: ${rHandPos.x.toFixed(2)}, ${rHandPos.y.toFixed(2)}`);
+        $("#debug2").text(`distance: ${Point.distance(rHandPos, ballPos).toFixed(2)}`);
+
+        canvasCtx.restore();
+    }
+    
+    const pose = new Pose({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+    }});
+    pose.setOptions({
+        upperBodyOnly: false,
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+    pose.onResults(onResults);
+    
+    /* const hands = new Hands({locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }});
+    hands.setOptions({
+      maxNumHands: 2,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    hands.onResults(onResults); */
+    
+   /*  const holistic = new Holistic({locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
+    }});
+    holistic.setOptions({
+      upperBodyOnly: false,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    holistic.onResults(onResults); */
+    
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await pose.send({image: videoElement});
+        // await hands.send({image: videoElement});
+        // await holistic.send({image: videoElement});
+      },
+      width: 1280,
+      height: 720
+    });
+    camera.start();
+    </script>
+</body>
+</html>
