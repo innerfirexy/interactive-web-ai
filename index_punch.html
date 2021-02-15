@@ -64,14 +64,23 @@
       <p id="debug1"></p>
       <p id="debug2"></p>
   </div>
-  <script type="module">
+    <script type="module">
     const videoElement = document.getElementsByClassName('input_video')[0];
     const canvasElement = document.getElementsByClassName('output_canvas')[0];
     const canvasCtx = canvasElement.getContext('2d');
     const FLAG_DRAW_POSE = true;
     const FLAG_DRAW_HANDS = false;
+
     const boxingImg = new Image(800, 1250);
-    
+    boxingImg.src = "images/boxing.png";
+    // function to draw image
+    function rotateAndPaintImage ( context, image, angleInRad, posX, posY, dx, dy, dWidth, dHeight) {
+        context.translate(posX, posY);
+        context.rotate( angleInRad );
+        context.drawImage( image, dx, dy, dWidth, dHeight);
+        context.rotate( -angleInRad );
+        context.translate(posX, posY);
+    }
     
     function onResults(results) {
         canvasCtx.save();
@@ -138,16 +147,28 @@
         const lElbowPos = new Point(results.poseLandmarks[13].x*1280, results.poseLandmarks[13].y*720);
         const rShoulderPos = new Point(results.poseLandmarks[12].x*1280, results.poseLandmarks[12].y*720);
         const rElbowPos = new Point(results.poseLandmarks[14].x*1280, results.poseLandmarks[14].y*720);
-        const bodyPos = Point.mean(rShoulderPos, lShoulderPos);
-        const rHandPos = new Point(results.poseLandmarks[16].x*1280, results.poseLandmarks[16].y*720);
+
+        const nosePos = new Point(results.poseLandmarks[0].x*1280, results.poseLandmarks[0].y*720);
+        const mouthLPos = new Point(results.poseLandmarks[9].x*1280, results.poseLandmarks[9].y*720);
+        const mouthRPos = new Point(results.poseLandmarks[10].x*1280, results.poseLandmarks[10].y*720);
+        const bodyPos = new Point(
+            (nosePos.x + mouthLPos.x + mouthRPos.x) / 3,
+            (nosePos.y + mouthLPos.y + mouthRPos.y) / 3,
+        );
+
         const lHandPos = new Point(results.poseLandmarks[15].x*1280, results.poseLandmarks[15].y*720);
+        const rHandPos = new Point(results.poseLandmarks[16].x*1280, results.poseLandmarks[16].y*720);
+        const lIndexPos = new Point(results.poseLandmarks[19].x*1280, results.poseLandmarks[19].y*720);
+        const rIndexPos = new Point(results.poseLandmarks[20].x*1280, results.poseLandmarks[20].y*720);
 
         // 9: MIDDLE_FINGER_MCP
         // const rHandPos = new Point(results.rightHandLandmarks[9].x*1280, results.rightHandLandmarks[9].y*720);
         // const lHandPos = new Point(results.leftHandLandmarks[9].x*1280, results.leftHandLandmarks[9].y*720);
         
         // const relDist = Point.distance(rShoulderPos, lShoulderPos);
-        const relDist = Point.distance(rShoulderPos, rElbowPos) + Point.distance(rElbowPos, rHandPos);
+        const rArmDist = Point.distance(rShoulderPos, rElbowPos) + Point.distance(rElbowPos, rHandPos);
+        const lArmDist = Point.distance(lShoulderPos, lElbowPos) + Point.distance(lElbowPos, lHandPos);
+        const relDist = (rArmDist + lArmDist) / 2
         const ballSize = 0.25 * relDist
         const ballPos = new Point(bodyPos.x + relDist * 0.9, bodyPos.y);
 
@@ -161,8 +182,8 @@
             // canvasCtx.strokeText('center', center_x, center_y)
         }
 
-        canvasCtx.fillStyle = 'white';
-        canvasCtx.fillRect(rHandPos.x, rHandPos.y, ballSize, ballSize);
+        // canvasCtx.fillStyle = 'white';
+        // canvasCtx.fillRect(rHandPos.x, rHandPos.y, ballSize, ballSize);
         //  canvasCtx.beginPath();
         //  canvasCtx.moveTo(rHandPos.x, rHandPos.y);
         //  canvasCtx.arc(rHandPos.x, rHandPos.y, 0, Math.PI*2, true);
@@ -171,6 +192,14 @@
         //  canvasCtx.arc(lHandPos.x, lHandPos.y, 0, Math.PI*2, true);
         //  canvasCtx.fill();
 
+        // draw boxing gloves
+        const imgH = Point.distance(rHandPos, rIndexPos) * 2;
+        const imgW = imgH * (boxingImg.width / boxingImg.height);
+        const imgAngle = Math.atan2(rHandPos.y - rElbowPos.y, rHandPos.x - rElbowPos.x) + Math.PI/2; // angle in radians
+        // const imgAngle = Math.atan2(rHandPos.y - rIndexPos.y, rHandPos.x - rIndexPos.x);
+        rotateAndPaintImage(canvasCtx, boxingImg, imgAngle, 
+            rHandPos.x, rHandPos.y, -imgW/2, -imgH, imgW, imgH);
+            // ballPos.x, ballPos.y, boxingImg.width/10, boxingImg.height/10);
 
         // hand raising
         // canvasCtx.fillStyle = 'blue';
