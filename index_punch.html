@@ -63,13 +63,17 @@
   <div id="debug">
       <p id="debug1"></p>
       <p id="debug2"></p>
+      <p id="debug3"></p>
   </div>
     <script type="module">
     const videoElement = document.getElementsByClassName('input_video')[0];
     const canvasElement = document.getElementsByClassName('output_canvas')[0];
     const canvasCtx = canvasElement.getContext('2d');
+    const CVS_WIDTH = canvasElement.width;
+    const CVS_HEIGHT = canvasElement.height;
     const FLAG_DRAW_POSE = true;
     const FLAG_DRAW_HANDS = false;
+    const FLAG_SMOOTH = true;
 
     const boxingImg = new Image(800, 1250);
     boxingImg.src = "images/boxing.png";
@@ -81,19 +85,78 @@
         context.rotate( -angleInRad );
         context.translate(posX, posY);
     }
+
+    var poseLandmarksCache = [];
+    var handsLandmarksCache = [];
+    const MAX_CACHE_SIZE = 5;
+
+    // A simple Point class
+    class Point {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        static displayName = "Point";
+        static distance(a, b) {
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            return Math.hypot(dx, dy);
+        }
+
+        static mean(a, b) {
+            const meanx = (a.x + b.x) / 2
+            const meany = (a.y + b.y) / 2
+            return new Point(meanx, meany)
+        }
+    }
     
     function onResults(results) {
         canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.clearRect(0, 0, CVS_WIDTH, CVS_HEIGHT);
 
         // draw camera image
-        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(results.image, 0, 0, CVS_WIDTH, CVS_HEIGHT);
+
+        // push to cache
+        poseLandmarksCache.push(results.poseLandmarks);
+        if (poseLandmarksCache.length > MAX_CACHE_SIZE) {
+            poseLandmarksCache.shift();
+        }
+        var smoothedPoseLandmarks;
+        if (poseLandmarksCache.length == 1) {
+            smoothedPoseLandmarks = poseLandmarksCache[0].poseLandmarks;
+        } else {
+            smoothedPoseLandmarks = [];
+            for (let i = 0; i < poseLandmarksCache[0].length; i++) { // iterate over all 33 joints
+                var coord = {x:0, y:0};
+                for (let j = 0; j < poseLandmarksCache.length; j++) {
+                    const p = poseLandmarksCache[j];
+                    coord.x += p[i].x;
+                    coord.y += p[i].y;
+                }
+                coord.x /= poseLandmarksCache.length;
+                coord.y /= poseLandmarksCache.length;
+                smoothedPoseLandmarks.push(coord);
+            }
+        }
+        $("#debug3").html(`poseLandmarksCache.length: ${poseLandmarksCache.length}; \n
+            poseLandmarks.length: ${smoothedPoseLandmarks.length};\n
+            poseLandmarks[11].x: ${smoothedPoseLandmarks[11].x};
+            results.poseLandmarks[11].x: ${results.poseLandmarks[11].x}`);
+        
+        var poseLandmarks;
+        if (FLAG_SMOOTH) {
+            poseLandmarks = smoothedPoseLandmarks;
+        } else {
+            poseLandmarks = results.poseLandmarks;
+        }
         
         // draw pose landmarks
         if (FLAG_DRAW_POSE) {
-          drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
+          drawConnectors(canvasCtx, poseLandmarks, POSE_CONNECTIONS,
                       {color: '#00FF00', lineWidth: 4});
-          drawLandmarks(canvasCtx, results.poseLandmarks,
+          drawLandmarks(canvasCtx, poseLandmarks,
                       {color: '#FF0000', lineWidth: 2});
         }
         
@@ -119,51 +182,32 @@
       // z: Should be discarded as currently the model is not fully trained to predict depth, but this is something on the roadmap.
       // visibility: A value in [0.0, 1.0] indicating the likelihood of the landmark being visible (present and not occluded) in the image.
     
-        // A simple Point class
-        class Point {
-            constructor(x, y) {
-            this.x = x;
-            this.y = y;
-            }
-
-            static displayName = "Point";
-            static distance(a, b) {
-            const dx = a.x - b.x;
-            const dy = a.y - b.y;
-            return Math.hypot(dx, dy);
-            }
-
-            static mean(a, b) {
-            const meanx = (a.x + b.x) / 2
-            const meany = (a.y + b.y) / 2
-            return new Point(meanx, meany)
-            }
-        }
+        
         
         // 12: right shoulder, 11: left shoulder
         // 16: right wrist, 15: left wrist
         // center of box
-        const lShoulderPos = new Point(results.poseLandmarks[11].x*1280, results.poseLandmarks[11].y*720);
-        const lElbowPos = new Point(results.poseLandmarks[13].x*1280, results.poseLandmarks[13].y*720);
-        const rShoulderPos = new Point(results.poseLandmarks[12].x*1280, results.poseLandmarks[12].y*720);
-        const rElbowPos = new Point(results.poseLandmarks[14].x*1280, results.poseLandmarks[14].y*720);
+        const lShoulderPos = new Point(poseLandmarks[11].x*CVS_WIDTH, poseLandmarks[11].y*CVS_HEIGHT);
+        const lElbowPos = new Point(poseLandmarks[13].x*CVS_WIDTH, poseLandmarks[13].y*CVS_HEIGHT);
+        const rShoulderPos = new Point(poseLandmarks[12].x*CVS_WIDTH, poseLandmarks[12].y*CVS_HEIGHT);
+        const rElbowPos = new Point(poseLandmarks[14].x*CVS_WIDTH, poseLandmarks[14].y*CVS_HEIGHT);
 
-        const nosePos = new Point(results.poseLandmarks[0].x*1280, results.poseLandmarks[0].y*720);
-        const mouthLPos = new Point(results.poseLandmarks[9].x*1280, results.poseLandmarks[9].y*720);
-        const mouthRPos = new Point(results.poseLandmarks[10].x*1280, results.poseLandmarks[10].y*720);
+        const nosePos = new Point(results.poseLandmarks[0].x*CVS_WIDTH, results.poseLandmarks[0].y*CVS_HEIGHT);
+        const mouthLPos = new Point(results.poseLandmarks[9].x*CVS_WIDTH, results.poseLandmarks[9].y*CVS_HEIGHT);
+        const mouthRPos = new Point(results.poseLandmarks[10].x*CVS_WIDTH, results.poseLandmarks[10].y*CVS_HEIGHT);
         const bodyPos = new Point(
             (nosePos.x + mouthLPos.x + mouthRPos.x) / 3,
             (nosePos.y + mouthLPos.y + mouthRPos.y) / 3,
         );
 
-        const lHandPos = new Point(results.poseLandmarks[15].x*1280, results.poseLandmarks[15].y*720);
-        const rHandPos = new Point(results.poseLandmarks[16].x*1280, results.poseLandmarks[16].y*720);
-        const lIndexPos = new Point(results.poseLandmarks[19].x*1280, results.poseLandmarks[19].y*720);
-        const rIndexPos = new Point(results.poseLandmarks[20].x*1280, results.poseLandmarks[20].y*720);
+        const lHandPos = new Point(poseLandmarks[15].x*CVS_WIDTH, poseLandmarks[15].y*CVS_HEIGHT);
+        const rHandPos = new Point(poseLandmarks[16].x*CVS_WIDTH, poseLandmarks[16].y*CVS_HEIGHT);
+        const lIndexPos = new Point(poseLandmarks[19].x*CVS_WIDTH, poseLandmarks[19].y*CVS_HEIGHT);
+        const rIndexPos = new Point(poseLandmarks[20].x*CVS_WIDTH, poseLandmarks[20].y*CVS_HEIGHT);
 
         // 9: MIDDLE_FINGER_MCP
-        // const rHandPos = new Point(results.rightHandLandmarks[9].x*1280, results.rightHandLandmarks[9].y*720);
-        // const lHandPos = new Point(results.leftHandLandmarks[9].x*1280, results.leftHandLandmarks[9].y*720);
+        // const rHandPos = new Point(results.rightHandLandmarks[9].x*CVS_WIDTH, results.rightHandLandmarks[9].y*CVS_HEIGHT);
+        // const lHandPos = new Point(results.leftHandLandmarks[9].x*CVS_WIDTH, results.leftHandLandmarks[9].y*CVS_HEIGHT);
         
         // const relDist = Point.distance(rShoulderPos, lShoulderPos);
         const rArmDist = Point.distance(rShoulderPos, rElbowPos) + Point.distance(rElbowPos, rHandPos);
@@ -181,16 +225,6 @@
             canvasCtx.fillRect(ballPos.x, ballPos.y, ballSize, ballSize);
             // canvasCtx.strokeText('center', center_x, center_y)
         }
-
-        // canvasCtx.fillStyle = 'white';
-        // canvasCtx.fillRect(rHandPos.x, rHandPos.y, ballSize, ballSize);
-        //  canvasCtx.beginPath();
-        //  canvasCtx.moveTo(rHandPos.x, rHandPos.y);
-        //  canvasCtx.arc(rHandPos.x, rHandPos.y, 0, Math.PI*2, true);
-        //  canvasCtx.fill();
-        //  canvasCtx.moveTo(lHandPos.x, lHandPos.y);
-        //  canvasCtx.arc(lHandPos.x, lHandPos.y, 0, Math.PI*2, true);
-        //  canvasCtx.fill();
 
         // draw boxing gloves
         const imgH = Point.distance(rHandPos, rIndexPos) * 2;
@@ -236,7 +270,7 @@
     });
     hands.onResults(onResults); */
     
-   /*  const holistic = new Holistic({locateFile: (file) => {
+    /* const holistic = new Holistic({locateFile: (file) => {
       return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
     }});
     holistic.setOptions({
@@ -253,8 +287,8 @@
         // await hands.send({image: videoElement});
         // await holistic.send({image: videoElement});
       },
-      width: 1280,
-      height: 720
+      width: CVS_WIDTH,
+      height: CVS_HEIGHT
     });
     camera.start();
     </script>
