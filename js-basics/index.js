@@ -2,13 +2,13 @@ const videoElement = document.getElementsByClassName('input_video')[0];
 const canvasElement = document.getElementsByClassName('output_canvas')[0];
 const canvasCtx = canvasElement.getContext('2d');
 
-Matter.use(
-      'matter-attractors'
-    );
+
 var Engine = Matter.Engine,
     Render = Matter.Render,
     World = Matter.World,
-    Bodies = Matter.Bodies;
+    Bodies = Matter.Bodies,
+    Constraint = Matter.Constraint;
+
 
 // create an engine
 var engine = Engine.create();
@@ -16,15 +16,28 @@ var render = Render.create({
   element: document.body,
   engine: engine
 });
+
+
 // create two boxes and a ground
-var boxA = Bodies.rectangle(400, 200, 80, 80);
-var boxB = Bodies.rectangle(450, 50, 80, 80);
+var boxA = Bodies.rectangle(150, 0, 5, 5, { isStatic: true });
+var boxB = Bodies.rectangle(450, 100, 150, 400);
 var ground = Bodies.rectangle(400, 610, 810, 60, { isStatic: true });
+
+var options = {
+  bodyA: boxA,
+  bodyB: boxB,
+  pointA: {
+    x: 0,
+    y: -100
+  }
+}
+var PunchBag = Matter.Constraint.create(options);
+
 
 
 
 // add all of the bodies to the world
-World.add(engine.world, [boxA, boxB, ground]);
+World.add(engine.world, [boxA, boxB, ground, PunchBag]);
 
 // run the engine
 
@@ -47,10 +60,31 @@ function onResults(results) {
   if ((60<=angleRadians2 && angleRadians2<=130) || (60<=angleRadians1 && angleRadians1<=130)  ){
     canvasCtx.strokeText("handRising", 10, 240)
  }
-
-
 canvasCtx.restore();
 }
+
+
+function Rendering() {
+  var bodies = Matter.Composite.allBodies(engine.world);
+  console.log(bodies);
+  canvasCtx.fillStyle = 'red';
+  canvasCtx.beginPath();
+  for (var i = 0; i < bodies.length; i += 1) {
+      var vertices = bodies[i].vertices;
+      canvasCtx.moveTo(vertices[0].x, vertices[0].y);
+      for (var j = 1; j < vertices.length; j += 1) {
+        canvasCtx.lineTo(vertices[j].x, vertices[j].y);
+      }
+      canvasCtx.fillStyle = 'red';
+      canvasCtx.lineTo(vertices[0].x, vertices[0].y);
+  }
+  canvasCtx.lineWidth = 1;
+  canvasCtx.strokeStyle = '#ff0000';
+  canvasCtx.stroke();
+}
+
+
+
 
 const pose = new Pose({locateFile: (file) => {
   return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
@@ -70,11 +104,8 @@ pose.onResults(results=>{
   onResults(results);
   Matter.Body.setPosition(rightHand, {x: results.poseLandmarks[19].x*1280, y: results.poseLandmarks[19].y*720});
   Matter.Body.setPosition(lefttHand, {x: results.poseLandmarks[20].x*1280, y: results.poseLandmarks[20].y*720});
-  canvasCtx.fillRect(boxA.position.x, boxA.position.y, 100, 100);
-  canvasCtx.fillRect(boxB.position.x, boxB.position.y, 100, 100);
-  canvasCtx.fillRect(lefttHand.position.x, lefttHand.position.y, 50, 50);
-  canvasCtx.fillRect(rightHand.position.x, rightHand.position.y, 50, 50);
-  console.log(boxC.position.x);
+  
+  Rendering(); 
 });
 
 
