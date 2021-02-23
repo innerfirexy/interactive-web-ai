@@ -21,7 +21,7 @@ var render = Render.create({
 // create two boxes and a ground
 var boxA = Bodies.rectangle(150, 0, 5, 5, { isStatic: true });
 var boxB = Bodies.rectangle(450, 100, 150, 400);
-var ground = Bodies.rectangle(400, 610, 810, 60, { isStatic: true });
+
 
 var options = {
   bodyA: boxA,
@@ -37,7 +37,7 @@ var PunchBag = Matter.Constraint.create(options);
 
 
 // add all of the bodies to the world
-World.add(engine.world, [boxA, boxB, ground, PunchBag]);
+World.add(engine.world, [boxA, boxB,  PunchBag]);
 
 // run the engine
 
